@@ -9,9 +9,11 @@ import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWeb
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -54,6 +56,37 @@ public class MoviesInfoControllerUnitTest {
                 .is2xxSuccessful()
                 .expectBodyList(MovieInfo.class)
                 .hasSize(3);
+    }
+
+    @DisplayName("GetAllMovieInfosByYear")
+    @Test
+    void test_getAllMovieInfosByYear() {
+        // given
+        Integer yearToFind = 2005;
+        var movies = List.of(new MovieInfo(null, "Batman Begins", 2005,
+                        List.of("Christian Bale", "Michael Cane"), LocalDate.parse("2005-06-15")),
+                new MovieInfo(null, "The Dark Knight",
+                        2008, List.of("Christian Bale", "HeathLedger"), LocalDate.parse("2008-07-18")),
+                new MovieInfo("abc", "Dark Knight Rises",
+                        2012, List.of("Christian Bale", "Tom Hardy"), LocalDate.parse("2012-07-20")));
+
+        // when : mock service getMovieInfoByYear() to return just 1 movie match based on given year
+        when(movieInfoServiceMock.getMovieInfoByYear(isA(Integer.class))).thenReturn(Flux.just(movies.get(0)));
+
+        // then
+
+        URI uriByYear = UriComponentsBuilder.fromUriString(MOVIE_INFO_URL)
+                .queryParam("year", yearToFind)
+                .buildAndExpand()
+                .toUri();
+
+        webTestClient.get()
+                .uri(uriByYear)
+                .exchange()
+                .expectStatus()
+                .is2xxSuccessful()
+                .expectBodyList(MovieInfo.class)
+                .hasSize(1);
     }
 
     @DisplayName("GetMovieInfoById")
@@ -121,7 +154,7 @@ public class MoviesInfoControllerUnitTest {
         // when : mock service addMovieInfo(MovieInfo) and returned "mockId"
         // mockito : isA and any can be used
         when(movieInfoServiceMock.updateMovieInfoById(any(MovieInfo.class), isA(String.class)))
-                .thenReturn(Mono.just(new MovieInfo("mockId", "Batman Begins333", 2007,
+                .thenReturn(Mono.just(new MovieInfo("abc", "Batman Begins333", 2007,
                         List.of("Christian Bale", "Michael Cane"), LocalDate.parse("2005-06-15"))));
 
         // then
@@ -160,5 +193,48 @@ public class MoviesInfoControllerUnitTest {
                 .expectStatus()
                 .isNoContent();
     }
+
+    @DisplayName("POSTMovieInfoInvalidParams")
+    @Test
+    void test_addMovieInfo_InvalidParams() {
+        // given : empty name, cast and negative year
+        var movie = new MovieInfo(null, "", -2005,
+                List.of(""), LocalDate.parse("2005-06-15"));
+
+        // when : mock is not needed since the call with not go service layer and error out before
+
+        // then
+        webTestClient.post()
+                .uri(MOVIE_INFO_URL)
+                .bodyValue(movie)
+                .exchange()
+                .expectStatus()
+                .isBadRequest()
+                .expectBody(String.class)
+                .consumeWith(stringEntityExchangeResult -> {
+                    var responseBody = stringEntityExchangeResult.getResponseBody();
+                    var expectedErrorMsg = "MovieInfo.cast should be present,MovieInfo.name should be present,MovieInfo.year must be a Positive value";
+                    assert responseBody != null;
+                    assertEquals(expectedErrorMsg, responseBody);
+                });
+    }
+
+    @DisplayName("GetMovieInfoById_NotFound")
+    @Test
+    void test_getMovieInfoById_NotFound() {
+        // given
+        String movieId = "abcxxx";
+
+        // when : mock to return nothing
+        when(movieInfoServiceMock.getMovieInfoById(isA(String.class))).thenReturn(Mono.empty());
+
+        // then
+        webTestClient.get()
+                .uri(MOVIE_INFO_URL + "/{movieId}", movieId)
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+    }
+
 
 }

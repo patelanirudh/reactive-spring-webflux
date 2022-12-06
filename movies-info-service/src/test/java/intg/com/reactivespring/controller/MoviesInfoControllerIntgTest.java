@@ -8,8 +8,10 @@ import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWeb
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 import reactor.test.StepVerifier;
 
+import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -21,7 +23,7 @@ import java.util.List;
 @AutoConfigureWebTestClient
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class MoviesInfoControllerTest {
+class MoviesInfoControllerIntgTest {
 
     @Autowired
     private MovieInfoRepository movieInfoRepository;
@@ -29,8 +31,7 @@ class MoviesInfoControllerTest {
     @Autowired
     WebTestClient webTestClient;
 
-    private final String customMovieInfoId = "abc";
-    private static String MOVIE_INFO_URL = "/v1/movieinfos";
+    private final static String MOVIE_INFO_URL = "/v1/movieinfos";
     private Long movieInfoRepoCount;
 
     @BeforeAll
@@ -38,6 +39,7 @@ class MoviesInfoControllerTest {
         System.out.println("!!!!!!!!!!!! @BeforeAll RUNNING SETUP : MovieInfo Repo Count " + movieInfoRepository.count().block() + " !!!!!!!!!!!");
 
         // "id" is provided only in 3rd Movie entry
+        String customMovieInfoId = "abc";
         List<MovieInfo> moviesList = List.of(new MovieInfo(null, "Batman Begins", 2005,
                         List.of("Christian Bale", "Michael Cane"), LocalDate.parse("2005-06-15")),
                 new MovieInfo(null, "The Dark Knight",
@@ -107,7 +109,7 @@ class MoviesInfoControllerTest {
                 .returnResult(MovieInfo.class)
                 .getResponseBody();
 
-        // then
+        // then :// expectNextCount is 3 if run separately and 4 with complete Order
         StepVerifier.create(movies)
                 .expectNextCount(4)
                 .verifyComplete();
@@ -159,6 +161,7 @@ class MoviesInfoControllerTest {
                 .expectBody(MovieInfo.class)
                 .consumeWith(movieInfoEntityExchangeResult -> {
                     MovieInfo responseBody = movieInfoEntityExchangeResult.getResponseBody();
+                    assert responseBody != null;
                     Assertions.assertEquals("Dark Knight Rises Forever", responseBody.getName(), "Movie name should match");
                     assert 2022 == responseBody.getYear();
                 });
@@ -179,5 +182,113 @@ class MoviesInfoControllerTest {
                 .expectStatus()
                 .isNoContent();
         // then
+    }
+
+    @Order(6)
+    @DisplayName("Put UpdateMovieInfoById NotFound")
+    @Test
+    void updateMovieInfoById_NotFound() {
+        // given
+        String movieIdToUpdate = "abcdef";
+        // sending Id null as we are separately passing it as Path Param
+        MovieInfo newMovie = new MovieInfo(null, "Dark Knight Rises Forever",
+                2022, List.of("Christian Bale", "Tom Hardy"), LocalDate.parse("2012-07-20"));
+
+        // when
+        webTestClient.put()
+                .uri(MOVIE_INFO_URL + "/{movieId}", movieIdToUpdate)
+                .bodyValue(newMovie)
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+//                .expectBody(MovieInfo.class)
+//                .consumeWith(movieInfoEntityExchangeResult -> {
+//                    MovieInfo responseBody = movieInfoEntityExchangeResult.getResponseBody();
+//                    Assertions.assertEquals("Dark Knight Rises Forever", responseBody.getName(), "Movie name should match");
+//                    assert 2022 == responseBody.getYear();
+//                });
+        // then
+    }
+
+    @Order(7)
+    @DisplayName("GET MovieInfoById NotFound")
+    @Test
+    void getMovieInfoById_NotFound() {
+        // given
+        System.out.println("!!!!!!!! GET MovieInfo Repo Count : " + movieInfoRepoCount + " !!!!!!!!!");
+        String movieId = "abcdef";
+
+        // when/then : both ways work to validate data
+        webTestClient.get()
+                .uri(MOVIE_INFO_URL + "/{movieId}", movieId)
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+    }
+
+    @Order(8)
+    @DisplayName("Get AllMovieInfos ByYear")
+    @Test
+    void getAllMovieInfosByYear() {
+        // given
+        Integer yearToFind = 2008;
+        MovieInfo movieInfo = new MovieInfo(null, "Valkyrie", 2008,
+                List.of("Tom Cruise", "Bill Nighty"), LocalDate.parse("2008-12-25"));
+        movieInfoRepository.save(movieInfo).block();
+
+        URI uriByYear = UriComponentsBuilder.fromUriString(MOVIE_INFO_URL)
+                .queryParam("year", yearToFind)
+                .buildAndExpand()
+                .toUri();
+
+        // when/assert
+        webTestClient.get()
+                .uri(uriByYear)
+                .exchange()
+                .expectStatus()
+                .is2xxSuccessful()
+                .expectBodyList(MovieInfo.class)
+                .hasSize(2);
+
+        //         works
+//        Flux<MovieInfo> responseBody = webTestClient.get()
+//                .uri(uriByYear)
+//                .exchange()
+//                .expectStatus()
+//                .is2xxSuccessful()
+//                .returnResult(MovieInfo.class)
+//                .getResponseBody();
+//
+//        StepVerifier.create(responseBody)
+//                .expectNextCount(2)
+//                .verifyComplete();
+    }
+
+    @Order(9)
+    @DisplayName("Get AllMovieInfos ByYearNoFound")
+    @Test
+    void getAllMovieInfosByYearNotFound() {
+        // given
+        Integer invalidYearToFind = 20058;
+
+        URI uriByYear = UriComponentsBuilder.fromUriString(MOVIE_INFO_URL)
+                .queryParam("year", invalidYearToFind)
+                .buildAndExpand()
+                .toUri();
+
+        webTestClient.get()
+                .uri(uriByYear)
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+
+        // works
+//                .expectBody()
+//                .jsonPath("$.error").isEqualTo("Not Found");
+        // works
+//                .expectBody(String.class)
+//                .consumeWith(stringEntityExchangeResult -> {
+//                   System.out.println("Printing exception : " + stringEntityExchangeResult.getResponseBody());
+//                });
     }
 }

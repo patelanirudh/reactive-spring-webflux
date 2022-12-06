@@ -5,6 +5,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.test.context.ActiveProfiles;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -30,7 +31,9 @@ class MovieInfoRepositoryIntgTest {
                 new MovieInfo(null, "The Dark Knight",
                         2008, List.of("Christian Bale", "HeathLedger"), LocalDate.parse("2008-07-18")),
                 new MovieInfo("abc", "Dark Knight Rises",
-                        2012, List.of("Christian Bale", "Tom Hardy"), LocalDate.parse("2012-07-20")));
+                        2012, List.of("Christian Bale", "Tom Hardy"), LocalDate.parse("2012-07-20")),
+                new MovieInfo(null, "Valkyrie", 2008,
+                        List.of("Tom Cruise", "Bill Nighty"), LocalDate.parse("2008-12-25")));
         // subscribe to flux and block until the last element completes, else we may run findAll before all data
         // is saved in the repo.
         movieInfoRepository.saveAll(moviesList)
@@ -138,6 +141,39 @@ class MovieInfoRepositoryIntgTest {
         // then
         StepVerifier.create(moviesFlux)
                 .expectNextCount(2)
+                .verifyComplete();
+    }
+
+    @DisplayName("findMovieInfoByYear")
+    @Test
+    void test_findMovieInfoByYear() {
+        // given
+        Integer movieYear = 2008;
+
+        // when
+        Flux<MovieInfo> moviesByYear = movieInfoRepository.findByYear(movieYear).log();
+
+        // then
+        StepVerifier.create(moviesByYear)
+                .expectNextCount(2)
+                .verifyComplete();
+    }
+
+    @DisplayName("findMovieInfoByName")
+    @Test
+    void test_findMovieInfoByName() {
+        // given
+        String movieNameToFind = "Dark Knight Rises";
+
+        // when
+        Mono<MovieInfo> moviesByName = movieInfoRepository.findByName(movieNameToFind).log();
+
+        // then
+        StepVerifier.create(moviesByName)
+                .assertNext(movieInfo -> {
+                    assert movieInfo != null;
+                    Assertions.assertEquals(movieNameToFind, movieInfo.getName(), "Movie name should match");
+                })
                 .verifyComplete();
     }
 

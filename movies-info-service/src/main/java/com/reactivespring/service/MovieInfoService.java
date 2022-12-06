@@ -29,14 +29,23 @@ public class MovieInfoService {
     }
 
     public Mono<MovieInfo> updateMovieInfoById(MovieInfo movieInfo, String searchMovieId) {
-        return movieInfoRepository.findById(searchMovieId).flatMap(movie -> {
-            movie.setYear(movieInfo.getYear());
-            movie.setName(movieInfo.getName());
-            return movieInfoRepository.save(movie);
-        });
+        return movieInfoRepository.findById(searchMovieId)
+                .flatMap(movie -> {
+                    movie.setYear(movieInfo.getYear());
+                    movie.setName(movieInfo.getName());
+                    return movieInfoRepository.save(movie);
+                });
     }
 
     public Mono<Void> deleteMovieInfoById(String movieId) {
         return movieInfoRepository.deleteById(movieId);
+    }
+
+    public Flux<MovieInfo> getMovieInfoByYear(Integer year) {
+        return movieInfoRepository.findByYear(year);
+    }
+
+    public Mono<MovieInfo> getMovieInfoByName(String name) {
+        return movieInfoRepository.findByName(name);
     }
 }
